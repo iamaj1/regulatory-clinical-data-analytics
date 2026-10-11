@@ -1,0 +1,4 @@
+study_id,site_id,subject_id,visit_date,status,query_status
+STUDY-001,SITE-01,001,2026-01-10,Complete,Open
+STUDY-001,SITE-01,001,invalid-date,Complete,Open
+STUDY-001,SITE-02,002,2026-02-10,,Closed
