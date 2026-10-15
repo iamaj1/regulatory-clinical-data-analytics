@@ -263,12 +263,37 @@ elif page in ("Regulatory Dossier", "Clinical Data Quality"):
             selected = st.number_input("Source row number", min_value=1, max_value=len(data), value=1, step=1)
             record = data.iloc[int(selected)-1]
             with st.expander("Selected record details", expanded=True):
-                st.table(pd.DataFrame({"Field": list(record.where(pd.notna(record), None).to_dict().keys()), "Value": [str(v) if v is not None else "—" for v in record.where(pd.notna(record), None).to_dict().values()]}))
-                if result and not result["findings"].empty:
+                # Present every source field as a readable two-column table (never raw JSON).
+                raw_record = record.to_dict()
+                detail_rows = []
+                for field_name, raw_value in raw_record.items():
+                    if pd.isna(raw_value):
+                        display_value = "—"
+                    elif isinstance(raw_value, (pd.Timestamp, datetime)):
+                        display_value = raw_value.strftime("%Y-%m-%d %H:%M") if not pd.isna(raw_value) else "—"
+                    else:
+                        display_value = str(raw_value).strip()
+                        if not display_value:
+                            display_value = "—"
+                    detail_rows.append({"Field": str(field_name).replace("_", " ").strip().title(), "Value": display_value})
+                details_table = pd.DataFrame(detail_rows, columns=["Field", "Value"])
+                st.dataframe(
+                    details_table,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(520, max(140, 38 * (len(details_table) + 1))),
+                    column_config={
+                        "Field": st.column_config.TextColumn("Field", width="medium"),
+                        "Value": st.column_config.TextColumn("Value", width="large"),
+                    },
+                )
+                if result is not None and not result["findings"].empty:
                     related = result["findings"][result["findings"]["row"] == int(selected)]
-                    st.markdown("**Findings for this row**")
-                    st.dataframe(related, use_container_width=True, hide_index=True)
-                    if not related.empty:
+                    st.markdown("#### Findings for this record")
+                    if related.empty:
+                        st.success("No validation findings are linked to this record.")
+                    else:
+                        st.dataframe(related, use_container_width=True, hide_index=True)
                         action_editor(related, "record finding")
 elif page == "Validation Results":
     st.header("Validation results & review actions")
