@@ -15,30 +15,43 @@ from src.validators import validate_clinical, validate_regulatory
 st.set_page_config(page_title="Regulatory & Clinical Data Analytics", page_icon="📊", layout="wide")
 
 # Calm, readable, responsive presentation. Keep active and inactive navigation text legible.
-st.markdown("""
-<style>
-:root { color-scheme: light; }
-.block-container {padding-top: 1.35rem; padding-bottom: 2rem; max-width: 1440px;}
-[data-testid="stSidebar"] {background: #edf1ef; border-right: 1px solid #d8e0dc;}
-[data-testid="stSidebar"] * {color: #253b36 !important;}
-[data-testid="stSidebar"] [data-testid="stRadio"] label {padding: .45rem .55rem; border-radius: .55rem; line-height: 1.35;}
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background: #dfe8e3;}
-[data-testid="stMetric"] {background: #f6f8f6; border: 1px solid #e2e8e3; padding: .8rem 1rem; border-radius: .8rem;}
-div[data-testid="stButton"] > button {border-radius: .65rem; min-height: 2.6rem;}
-[data-testid="stDataFrame"] {border: 1px solid #e1e7e3; border-radius: .6rem;}
-.small-note {color:#63716b; font-size:.9rem;}
-.hero {padding:1.15rem 1.35rem; background:linear-gradient(115deg,#f3f6f3,#e8f0ec); border:1px solid #dfe7e1; border-radius:1rem; margin-bottom:1rem;}
-.hero h2 {margin:0 0 .35rem 0; color:#263c35;}
-@media (max-width: 700px) {.block-container {padding: .8rem .8rem 1.5rem;} h1 {font-size:1.65rem !important;}}
-</style>
-""", unsafe_allow_html=True)
-
 st.session_state.setdefault("workspace", "Regulatory")
 st.session_state.setdefault("source_data", {})
 st.session_state.setdefault("validation", {})
 st.session_state.setdefault("review_actions", {})
 st.session_state.setdefault("audit_events", [])
 st.session_state.setdefault("active_record", None)
+
+workspace_theme = {
+    "Regulatory": {"sidebar_bg":"#263B50","sidebar_text":"#F4F8FC","sidebar_muted":"#C7D8E7","accent":"#8BB9D8","selected_bg":"#DDECF5","selected_text":"#203447","hover_bg":"#36536C","hero_bg":"#EAF2F8","hero_border":"#CBDCE8","hero_text":"#263B50","metric_bg":"#F3F7FA","metric_border":"#D8E4ED","table_border":"#D8E4ED"},
+    "Clinical": {"sidebar_bg":"#24443A","sidebar_text":"#F4FBF7","sidebar_muted":"#C7E4D7","accent":"#9AD9BD","selected_bg":"#DDF3E7","selected_text":"#234136","hover_bg":"#31594B","hero_bg":"#EAF5EF","hero_border":"#CDE4D6","hero_text":"#24443A","metric_bg":"#F3F9F5","metric_border":"#D6E8DC","table_border":"#D6E8DC"}
+}[st.session_state.workspace]
+
+css = """
+<style>
+:root { color-scheme: light; }
+.block-container {padding-top: 1.35rem; padding-bottom: 2rem; max-width: 1440px;}
+[data-testid="stSidebar"] {background: __SIDEBAR_BG__; border-right: 1px solid __HERO_BORDER__;}
+[data-testid="stSidebar"] * {color: __SIDEBAR_TEXT__;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {color: __SIDEBAR_MUTED__ !important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label {padding: .45rem .55rem; border-radius: .55rem; line-height: 1.35; color: __SIDEBAR_TEXT__ !important;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background: __HOVER_BG__;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {background: __SELECTED_BG__; color: __SELECTED_TEXT__ !important; font-weight: 650;}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) * {color: __SELECTED_TEXT__ !important;}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] {background: #fff; border-radius: .6rem;}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] * {color: #243746 !important;}
+[data-testid="stMetric"] {background: __METRIC_BG__; border: 1px solid __METRIC_BORDER__; padding: .8rem 1rem; border-radius: .8rem;}
+div[data-testid="stButton"] > button {border-radius: .65rem; min-height: 2.6rem;}
+[data-testid="stDataFrame"] {border: 1px solid __TABLE_BORDER__; border-radius: .6rem;}
+.small-note {color:#63716b; font-size:.9rem;}
+.hero {padding:1.15rem 1.35rem; background:__HERO_BG__; border:1px solid __HERO_BORDER__; border-radius:1rem; margin-bottom:1rem;}
+.hero h2 {margin:0 0 .35rem 0; color:__HERO_TEXT__;}
+@media (max-width: 700px) {.block-container {padding: .8rem .8rem 1.5rem;} h1 {font-size:1.65rem !important;}}
+</style>
+"""
+for theme_key, css_key in [("sidebar_bg","SIDEBAR_BG"),("sidebar_text","SIDEBAR_TEXT"),("sidebar_muted","SIDEBAR_MUTED"),("hover_bg","HOVER_BG"),("selected_bg","SELECTED_BG"),("selected_text","SELECTED_TEXT"),("hero_bg","HERO_BG"),("hero_border","HERO_BORDER"),("hero_text","HERO_TEXT"),("metric_bg","METRIC_BG"),("metric_border","METRIC_BORDER"),("table_border","TABLE_BORDER")]:
+    css = css.replace("__" + css_key + "__", workspace_theme[theme_key])
+st.markdown(css, unsafe_allow_html=True)
 
 def log_event(message: str) -> None:
     st.session_state.audit_events.insert(0, {"Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Event": message})
@@ -72,9 +85,9 @@ with st.sidebar:
     st.selectbox("Switch workspace", ["Regulatory", "Clinical"], key="workspace")
     st.caption(f"{st.session_state.workspace.upper()} WORKSPACE")
     if st.session_state.workspace == "Regulatory":
-        pages = ["Dashboard", "Document Upload", "Regulatory Dossier", "Validation Results", "CTD Module View", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
+        pages = ["Dashboard", "Document Upload", "Validation Results", "Regulatory Dossier", "CTD Module View", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
     else:
-        pages = ["Dashboard", "Data Upload", "Clinical Data Quality", "Validation Results", "Study Listings", "Subject Data Review", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
+        pages = ["Dashboard", "Data Upload", "Validation Results", "Clinical Data Quality", "Study Listings", "Subject Data Review", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
     if st.session_state.get("jump_page") in pages:
         st.session_state["page_nav"] = st.session_state.pop("jump_page")
     page = st.radio("Navigation", pages, key="page_nav", label_visibility="collapsed")
@@ -265,7 +278,7 @@ elif page in ("Regulatory Dossier", "Clinical Data Quality"):
             selected = st.number_input("Source row number", min_value=1, max_value=len(data), value=1, step=1)
             record = data.iloc[int(selected)-1]
             with st.expander("Selected record details", expanded=True):
-                st.json(record.where(pd.notna(record), None).to_dict())
+                st.dataframe(pd.DataFrame({"Field": list(record.where(pd.notna(record), None).to_dict().keys()), "Value": [str(v) if v is not None else "—" for v in record.where(pd.notna(record), None).to_dict().values()]}), use_container_width=True, hide_index=True)
                 if result and not result["findings"].empty:
                     related = result["findings"][result["findings"]["row"] == int(selected)]
                     st.markdown("**Findings for this row**")
@@ -315,7 +328,7 @@ elif page == "Subject Data Review":
         chosen = st.selectbox("Choose an individual subject record", labels)
         idx = labels.index(chosen); record = data.iloc[idx]
         st.subheader("Case details")
-        st.json(record.where(pd.notna(record), None).to_dict())
+        st.dataframe(pd.DataFrame({"Field": list(record.where(pd.notna(record), None).to_dict().keys()), "Value": [str(v) if v is not None else "—" for v in record.where(pd.notna(record), None).to_dict().values()]}), use_container_width=True, hide_index=True)
         if result and not result["findings"].empty:
             related = result["findings"][result["findings"]["row"] == idx + 1]
             st.markdown("#### Findings for this subject")
