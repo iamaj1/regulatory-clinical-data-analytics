@@ -75,7 +75,9 @@ with st.sidebar:
         pages = ["Dashboard", "Document Upload", "Regulatory Dossier", "Validation Results", "CTD Module View", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
     else:
         pages = ["Dashboard", "Data Upload", "Clinical Data Quality", "Validation Results", "Study Listings", "Subject Data Review", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
-    if st.session_state.get("jump_page") in pages:\n        st.session_state["page_nav"] = st.session_state.pop("jump_page")\n    page = st.radio("Navigation", pages, key="page_nav", label_visibility="collapsed")
+    if st.session_state.get("jump_page") in pages:
+        st.session_state["page_nav"] = st.session_state.pop("jump_page")
+    page = st.radio("Navigation", pages, key="page_nav", label_visibility="collapsed")
 
 st.markdown('<div class="hero"><h2>Regulatory & Clinical Data Analytics</h2><div class="small-note">Upload → Validate → Review → Export · Clear, traceable data-quality workflow</div></div>', unsafe_allow_html=True)
 st.caption("Portfolio decision-support prototype · Use synthetic/demo data only. Do not upload patient-identifiable information.")
