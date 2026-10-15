@@ -30,7 +30,7 @@ workspace_theme = {
 css = """
 <style>
 :root { color-scheme: light; }
-.block-container {padding-top: 1.35rem; padding-bottom: 2rem; max-width: 1440px;}
+.block-container {padding-top: 2rem; padding-bottom: 2rem; max-width: 1440px;}
 [data-testid="stSidebar"] {background: __SIDEBAR_BG__; border-right: 1px solid __HERO_BORDER__;}
 [data-testid="stSidebar"] * {color: __SIDEBAR_TEXT__;}
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {color: __SIDEBAR_MUTED__ !important;}
@@ -38,8 +38,8 @@ css = """
 [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background: __HOVER_BG__;}
 [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {background: __SELECTED_BG__; color: __SELECTED_TEXT__ !important; font-weight: 650;}
 [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) * {color: __SELECTED_TEXT__ !important;}
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] {background: #fff; border-radius: .6rem;}
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] * {color: #243746 !important;}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] label {color: __SIDEBAR_TEXT__ !important; font-weight: 700; font-size: .98rem; padding-bottom: .2rem;}\n[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] {background: #fff; border: 1px solid #B7C9D8; border-radius: .6rem; min-height: 2.8rem;}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] * {color: #243746 !important; font-weight: 600;}
 [data-testid="stMetric"] {background: __METRIC_BG__; border: 1px solid __METRIC_BORDER__; padding: .8rem 1rem; border-radius: .8rem;}
 div[data-testid="stButton"] > button {border-radius: .65rem; min-height: 2.6rem;}
 [data-testid="stDataFrame"] {border: 1px solid __TABLE_BORDER__; border-radius: .6rem;}
@@ -80,6 +80,30 @@ def findings_with_actions(findings: pd.DataFrame) -> pd.DataFrame:
     out["action_taken"] = actions
     return out
 
+def get_validated(data: pd.DataFrame, workspace: str, expected_text: str = "", consistency_text: str = ""):
+    if workspace == "Regulatory":
+        expected = [x.strip() for x in expected_text.split(",") if x.strip()]
+        return validate_regulatory(data, expected)
+    consistency = json.loads(consistency_text) if consistency_text.strip() else {}
+    if not isinstance(consistency, dict) or not all(isinstance(v, list) for v in consistency.values()):
+        raise ValueError("Consistency rules must be a JSON object whose values are lists.")
+    return validate_clinical(data, consistency)
+
+def run_validation_action():
+    data = current_data()
+    if data is None:
+        st.warning("Upload a file or load the synthetic sample first.")
+        return
+    try:
+        result = get_validated(data, st.session_state.workspace,
+            st.session_state.get("expected_docs", "Quality Overall Summary, Clinical Overview"),
+            st.session_state.get("consistency_rules", ""))
+        st.session_state.validation[current_key()] = result
+        log_event(f"{st.session_state.workspace}: validation run for {len(data)} records; {len(result['findings'])} findings.")
+        st.success("Validation completed. Open Validation Results to review each finding.")
+    except (ValueError, json.JSONDecodeError) as exc:
+        st.error(str(exc))
+
 with st.sidebar:
     st.markdown("## 📊 Regulatory & Clinical")
     st.selectbox("Switch workspace", ["Regulatory", "Clinical"], key="workspace")
@@ -89,10 +113,6 @@ with st.sidebar:
     st.markdown("### ⬆️ Upload & validate")
     demo = st.checkbox("Use synthetic demo dataset", key=f"{current_key()}_demo")
     uploaded = st.file_uploader("Choose CSV or Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_upload")
-    if st.session_state.workspace == "Regulatory":
-        st.text_input("Expected document checklist", "Quality Overall Summary, Clinical Overview", key="expected_docs")
-    else:
-        st.text_input("Consistency rules (optional JSON)", "", key="consistency_rules", placeholder='{"status":["Complete","Open"]}')
     if demo:
         sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
         if sample.exists():
@@ -108,8 +128,8 @@ with st.sidebar:
             st.caption(f"Loaded: {uploaded.name} · {len(data):,} rows")
         except Exception as exc:
             st.error(f"Could not read this file: {exc}")
-    if st.button("Submit & run validation", type="primary", use_container_width=True):
-        do_validate()
+    if st.button("▶ Submit & Run Validation", type="primary", width="stretch", key=f"{current_key()}_run_validation"):
+        run_validation_action()
     st.divider()
 
     if st.session_state.workspace == "Regulatory":
@@ -124,30 +144,6 @@ with st.sidebar:
 
 st.markdown('<div class="hero"><h2>Regulatory & Clinical Data Analytics</h2><div class="small-note">Upload → Validate → Review → Export · Clear, traceable data-quality workflow</div></div>', unsafe_allow_html=True)
 st.caption("Portfolio decision-support prototype · Use synthetic/demo data only. Do not upload patient-identifiable information.")
-
-def get_validated(data: pd.DataFrame, workspace: str, expected_text: str = "", consistency_text: str = ""):
-    if workspace == "Regulatory":
-        expected = [x.strip() for x in expected_text.split(",") if x.strip()]
-        return validate_regulatory(data, expected)
-    consistency = json.loads(consistency_text) if consistency_text.strip() else {}
-    if not isinstance(consistency, dict) or not all(isinstance(v, list) for v in consistency.values()):
-        raise ValueError("Consistency rules must be a JSON object whose values are lists.")
-    return validate_clinical(data, consistency)
-
-def do_validate():
-    data = current_data()
-    if data is None:
-        st.warning("Upload a file or load the synthetic sample first.")
-        return
-    try:
-        result = get_validated(data, st.session_state.workspace,
-            st.session_state.get("expected_docs", "Quality Overall Summary, Clinical Overview"),
-            st.session_state.get("consistency_rules", ""))
-        st.session_state.validation[current_key()] = result
-        log_event(f"{st.session_state.workspace}: validation run for {len(data)} records; {len(result['findings'])} findings.")
-        st.success("Validation completed. Open Validation Results to review each finding.")
-    except (ValueError, json.JSONDecodeError) as exc:
-        st.error(str(exc))
 
 def kpis(data, result):
     findings = result["findings"] if result else pd.DataFrame()
