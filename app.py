@@ -75,7 +75,7 @@ with st.sidebar:
         pages = ["Dashboard", "Document Upload", "Regulatory Dossier", "Validation Results", "CTD Module View", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
     else:
         pages = ["Dashboard", "Data Upload", "Clinical Data Quality", "Validation Results", "Study Listings", "Subject Data Review", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
-    page = st.radio("Navigation", pages, label_visibility="collapsed")
+    if st.session_state.get("jump_page") in pages:\n        st.session_state["page_nav"] = st.session_state.pop("jump_page")\n    page = st.radio("Navigation", pages, key="page_nav", label_visibility="collapsed")
 
 st.markdown('<div class="hero"><h2>Regulatory & Clinical Data Analytics</h2><div class="small-note">Upload → Validate → Review → Export · Clear, traceable data-quality workflow</div></div>', unsafe_allow_html=True)
 st.caption("Portfolio decision-support prototype · Use synthetic/demo data only. Do not upload patient-identifiable information.")
@@ -246,11 +246,11 @@ elif page == "Dashboard":
     st.markdown("#### Quick actions")
     a, b, c = st.columns(3)
     if a.button("View Results", use_container_width=True):
-        st.session_state["jump_page"] = "Validation Results"; st.rerun()
+        st.session_state["page_nav"] = "Validation Results"; st.rerun()
     if b.button("Open Case Study", use_container_width=True):
-        st.session_state["jump_page"] = "Subject Data Review" if st.session_state.workspace == "Clinical" else "Regulatory Dossier"; st.rerun()
+        st.session_state["page_nav"] = "Subject Data Review" if st.session_state.workspace == "Clinical" else "Regulatory Dossier"; st.rerun()
     if c.button("Final Report", use_container_width=True):
-        st.session_state["jump_page"] = "Reports & Export"; st.rerun()
+        st.session_state["page_nav"] = "Reports & Export"; st.rerun()
 elif page in ("Regulatory Dossier", "Clinical Data Quality"):
     st.header("Record explorer")
     data, result = current_data(), current_result()
