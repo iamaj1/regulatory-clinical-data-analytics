@@ -89,7 +89,7 @@ def get_validated(data: pd.DataFrame, workspace: str, expected_text: str = "", c
         raise ValueError("Consistency rules must be a JSON object whose values are lists.")
     return validate_clinical(data, consistency)
 
-def do_validate():
+def run_validation_action():
     data = current_data()
     if data is None:
         st.warning("Upload a file or load the synthetic sample first.")
@@ -128,8 +128,8 @@ with st.sidebar:
             st.caption(f"Loaded: {uploaded.name} · {len(data):,} rows")
         except Exception as exc:
             st.error(f"Could not read this file: {exc}")
-    if st.button("▶ Submit & Run Validation", type="primary", use_container_width=True, key=f"{current_key()}_run_validation"):
-        do_validate()
+    if st.button("▶ Submit & Run Validation", type="primary", width="stretch", key=f"{current_key()}_run_validation"):
+        run_validation_action()
     st.divider()
 
     if st.session_state.workspace == "Regulatory":
