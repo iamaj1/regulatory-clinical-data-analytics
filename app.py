@@ -30,7 +30,7 @@ workspace_theme = {
 css = """
 <style>
 :root { color-scheme: light; }
-.block-container {padding-top: 1.35rem; padding-bottom: 2rem; max-width: 1440px;}
+.block-container {padding-top: 2rem; padding-bottom: 2rem; max-width: 1440px;}
 [data-testid="stSidebar"] {background: __SIDEBAR_BG__; border-right: 1px solid __HERO_BORDER__;}
 [data-testid="stSidebar"] * {color: __SIDEBAR_TEXT__;}
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {color: __SIDEBAR_MUTED__ !important;}
@@ -38,8 +38,8 @@ css = """
 [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background: __HOVER_BG__;}
 [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {background: __SELECTED_BG__; color: __SELECTED_TEXT__ !important; font-weight: 650;}
 [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) * {color: __SELECTED_TEXT__ !important;}
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] {background: #fff; border-radius: .6rem;}
-[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] * {color: #243746 !important;}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] label {color: __SIDEBAR_TEXT__ !important; font-weight: 700; font-size: .98rem; padding-bottom: .2rem;}\n[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] {background: #fff; border: 1px solid #B7C9D8; border-radius: .6rem; min-height: 2.8rem;}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] * {color: #243746 !important; font-weight: 600;}
 [data-testid="stMetric"] {background: __METRIC_BG__; border: 1px solid __METRIC_BORDER__; padding: .8rem 1rem; border-radius: .8rem;}
 div[data-testid="stButton"] > button {border-radius: .65rem; min-height: 2.6rem;}
 [data-testid="stDataFrame"] {border: 1px solid __TABLE_BORDER__; border-radius: .6rem;}
@@ -80,51 +80,6 @@ def findings_with_actions(findings: pd.DataFrame) -> pd.DataFrame:
     out["action_taken"] = actions
     return out
 
-with st.sidebar:
-    st.markdown("## 📊 Regulatory & Clinical")
-    st.selectbox("Switch workspace", ["Regulatory", "Clinical"], key="workspace")
-    st.caption(f"{st.session_state.workspace.upper()} WORKSPACE")
-
-    # Upload is an always-visible workflow action, not a separate navigation page.
-    st.markdown("### ⬆️ Upload & validate")
-    demo = st.checkbox("Use synthetic demo dataset", key=f"{current_key()}_demo")
-    uploaded = st.file_uploader("Choose CSV or Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_upload")
-    if st.session_state.workspace == "Regulatory":
-        st.text_input("Expected document checklist", "Quality Overall Summary, Clinical Overview", key="expected_docs")
-    else:
-        st.text_input("Consistency rules (optional JSON)", "", key="consistency_rules", placeholder='{"status":["Complete","Open"]}')
-    if demo:
-        sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
-        if sample.exists():
-            st.session_state.source_data[current_key()] = pd.read_csv(sample)
-            st.caption(f"Demo loaded: {sample.name}")
-    elif uploaded is not None:
-        try:
-            sheets = workbook_sheets(uploaded)
-            sheet = st.selectbox("Worksheet", sheets, key=f"{current_key()}_sheet") if len(sheets) > 1 else sheets[0]
-            uploaded.seek(0)
-            data = read_upload(uploaded, sheet)
-            st.session_state.source_data[current_key()] = data
-            st.caption(f"Loaded: {uploaded.name} · {len(data):,} rows")
-        except Exception as exc:
-            st.error(f"Could not read this file: {exc}")
-    if st.button("Submit & run validation", type="primary", use_container_width=True):
-        do_validate()
-    st.divider()
-
-    if st.session_state.workspace == "Regulatory":
-        pages = ["Dashboard", "Validation Results", "Regulatory Dossier", "CTD Module View", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
-    else:
-        pages = ["Dashboard", "Validation Results", "Clinical Data Quality", "Study Listings", "Subject Data Review", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
-    if st.session_state.get("jump_page") in pages:
-        st.session_state["page_nav"] = st.session_state.pop("jump_page")
-    if st.session_state.get("page_nav") not in pages:
-        st.session_state["page_nav"] = "Dashboard"
-    page = st.radio("Navigation", pages, key="page_nav", label_visibility="collapsed")
-
-st.markdown('<div class="hero"><h2>Regulatory & Clinical Data Analytics</h2><div class="small-note">Upload → Validate → Review → Export · Clear, traceable data-quality workflow</div></div>', unsafe_allow_html=True)
-st.caption("Portfolio decision-support prototype · Use synthetic/demo data only. Do not upload patient-identifiable information.")
-
 def get_validated(data: pd.DataFrame, workspace: str, expected_text: str = "", consistency_text: str = ""):
     if workspace == "Regulatory":
         expected = [x.strip() for x in expected_text.split(",") if x.strip()]
@@ -148,6 +103,47 @@ def do_validate():
         st.success("Validation completed. Open Validation Results to review each finding.")
     except (ValueError, json.JSONDecodeError) as exc:
         st.error(str(exc))
+
+with st.sidebar:
+    st.markdown("## 📊 Regulatory & Clinical")
+    st.selectbox("Switch workspace", ["Regulatory", "Clinical"], key="workspace")
+    st.caption(f"{st.session_state.workspace.upper()} WORKSPACE")
+
+    # Upload is an always-visible workflow action, not a separate navigation page.
+    st.markdown("### ⬆️ Upload & validate")
+    demo = st.checkbox("Use synthetic demo dataset", key=f"{current_key()}_demo")
+    uploaded = st.file_uploader("Choose CSV or Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_upload")
+    if demo:
+        sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
+        if sample.exists():
+            st.session_state.source_data[current_key()] = pd.read_csv(sample)
+            st.caption(f"Demo loaded: {sample.name}")
+    elif uploaded is not None:
+        try:
+            sheets = workbook_sheets(uploaded)
+            sheet = st.selectbox("Worksheet", sheets, key=f"{current_key()}_sheet") if len(sheets) > 1 else sheets[0]
+            uploaded.seek(0)
+            data = read_upload(uploaded, sheet)
+            st.session_state.source_data[current_key()] = data
+            st.caption(f"Loaded: {uploaded.name} · {len(data):,} rows")
+        except Exception as exc:
+            st.error(f"Could not read this file: {exc}")
+    if st.button("▶ Submit & Run Validation", type="primary", use_container_width=True, key=f"{current_key()}_run_validation"):
+        do_validate()
+    st.divider()
+
+    if st.session_state.workspace == "Regulatory":
+        pages = ["Dashboard", "Validation Results", "Regulatory Dossier", "CTD Module View", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
+    else:
+        pages = ["Dashboard", "Validation Results", "Clinical Data Quality", "Study Listings", "Subject Data Review", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
+    if st.session_state.get("jump_page") in pages:
+        st.session_state["page_nav"] = st.session_state.pop("jump_page")
+    if st.session_state.get("page_nav") not in pages:
+        st.session_state["page_nav"] = "Dashboard"
+    page = st.radio("Navigation", pages, key="page_nav", label_visibility="collapsed")
+
+st.markdown('<div class="hero"><h2>Regulatory & Clinical Data Analytics</h2><div class="small-note">Upload → Validate → Review → Export · Clear, traceable data-quality workflow</div></div>', unsafe_allow_html=True)
+st.caption("Portfolio decision-support prototype · Use synthetic/demo data only. Do not upload patient-identifiable information.")
 
 def kpis(data, result):
     findings = result["findings"] if result else pd.DataFrame()
