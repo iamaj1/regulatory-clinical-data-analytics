@@ -128,7 +128,7 @@ with st.sidebar:
             st.caption(f"Loaded: {uploaded.name} · {len(data):,} rows")
         except Exception as exc:
             st.error(f"Could not read this file: {exc}")
-    if st.button("▶ Submit & Run Validation", type="primary", use_container_width=True, key=f"{current_key()}_run_validation"):
+    if st.button("▶ Submit & Run Validation", type="primary", width="stretch", key=f"{current_key()}_run_validation"):
         do_validate()
     st.divider()
 
