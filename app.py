@@ -278,7 +278,7 @@ elif page in ("Regulatory Dossier", "Clinical Data Quality"):
             selected = st.number_input("Source row number", min_value=1, max_value=len(data), value=1, step=1)
             record = data.iloc[int(selected)-1]
             with st.expander("Selected record details", expanded=True):
-                st.dataframe(pd.DataFrame({"Field": list(record.where(pd.notna(record), None).to_dict().keys()), "Value": [str(v) if v is not None else "—" for v in record.where(pd.notna(record), None).to_dict().values()]}), use_container_width=True, hide_index=True)
+                st.table(pd.DataFrame({"Field": list(record.where(pd.notna(record), None).to_dict().keys()), "Value": [str(v) if v is not None else "—" for v in record.where(pd.notna(record), None).to_dict().values()]}))
                 if result and not result["findings"].empty:
                     related = result["findings"][result["findings"]["row"] == int(selected)]
                     st.markdown("**Findings for this row**")
@@ -328,7 +328,7 @@ elif page == "Subject Data Review":
         chosen = st.selectbox("Choose an individual subject record", labels)
         idx = labels.index(chosen); record = data.iloc[idx]
         st.subheader("Case details")
-        st.dataframe(pd.DataFrame({"Field": list(record.where(pd.notna(record), None).to_dict().keys()), "Value": [str(v) if v is not None else "—" for v in record.where(pd.notna(record), None).to_dict().values()]}), use_container_width=True, hide_index=True)
+        st.table(pd.DataFrame({"Field": list(record.where(pd.notna(record), None).to_dict().keys()), "Value": [str(v) if v is not None else "—" for v in record.where(pd.notna(record), None).to_dict().values()]}))
         if result and not result["findings"].empty:
             related = result["findings"][result["findings"]["row"] == idx + 1]
             st.markdown("#### Findings for this subject")
