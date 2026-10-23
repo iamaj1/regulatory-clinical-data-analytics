@@ -150,33 +150,13 @@ with st.sidebar:
     st.selectbox("Switch workspace", ["Regulatory", "Clinical"], key="workspace")
     st.caption(f"{st.session_state.workspace.upper()} WORKSPACE")
 
-    # Upload is an always-visible workflow action, not a separate navigation page.
-    st.markdown("### ⬆️ Upload & validate")
-    demo = st.checkbox("Use synthetic demo dataset", key=f"{current_key()}_demo")
-    uploaded = st.file_uploader("Choose CSV or Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_upload")
-    if demo:
-        sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
-        if sample.exists():
-            set_source_data(pd.read_csv(sample))
-            st.caption(f"Demo loaded: {sample.name}")
-    elif uploaded is not None:
-        try:
-            sheets = workbook_sheets(uploaded)
-            sheet = st.selectbox("Worksheet", sheets, key=f"{current_key()}_sheet") if len(sheets) > 1 else sheets[0]
-            uploaded.seek(0)
-            data = read_upload(uploaded, sheet)
-            set_source_data(data)
-            st.caption(f"Loaded: {uploaded.name} · {len(data):,} rows")
-        except Exception as exc:
-            st.error(f"Could not read this file: {exc}")
-    if st.button("▶ Submit & Run Validation", type="primary", width="stretch", key=f"{current_key()}_run_validation"):
-        run_validation_action()
+    st.caption("Use the steps below in order: upload → validate → review → report.")
     st.divider()
 
     if st.session_state.workspace == "Regulatory":
-        pages = ["Dashboard", "Validation Results", "Regulatory Dossier", "CTD Module View", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
+        pages = ["Dashboard", "Upload Data", "Validation Results", "Regulatory Dossier", "CTD Module View", "Reference Library", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
     else:
-        pages = ["Dashboard", "Validation Results", "Clinical Data Quality", "Study Listings", "Subject Data Review", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
+        pages = ["Dashboard", "Upload Data", "Validation Results", "Clinical Data Quality", "Study Listings", "Subject Data Review", "Reference Library", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
     if st.session_state.get("jump_page") in pages:
         st.session_state["page_nav"] = st.session_state.pop("jump_page")
     if st.session_state.get("page_nav") not in pages:
@@ -284,22 +264,76 @@ def report_page(data, result):
     else:
         st.warning("Validation has not been run yet.")
 
+if page == "Upload Data":
+    st.header("Step 1 · Upload your data")
+    st.write("Choose the workspace first, then upload a CSV/Excel file or use the sample file to practise.")
+    st.caption("Use synthetic/demo data only. Do not upload patient-identifiable or confidential information.")
+    demo = st.checkbox("Use the built-in demo dataset", key=f"{current_key()}_upload_demo")
+    if demo:
+        sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
+        if sample.exists():
+            sample_data = pd.read_csv(sample)
+            set_source_data(sample_data)
+            st.success(f"Demo data ready: {len(sample_data):,} records and {len(sample_data.columns)} columns.")
+            st.dataframe(sample_data.head(10), use_container_width=True, hide_index=True)
+    uploaded = st.file_uploader("Choose a CSV or Excel file", type=["csv", "xlsx", "xls"],
+                                key=f"{current_key()}_workflow_upload",
+                                help="Your file should have column names in the first row.")
+    if uploaded is not None:
+        try:
+            sheets = workbook_sheets(uploaded)
+            sheet = st.selectbox("Choose worksheet", sheets, key=f"{current_key()}_workflow_sheet") if len(sheets) > 1 else sheets[0]
+            uploaded.seek(0)
+            uploaded_data = read_upload(uploaded, sheet)
+            set_source_data(uploaded_data)
+            st.success(f"File ready: {uploaded.name} · {len(uploaded_data):,} records · {len(uploaded_data.columns)} columns.")
+            st.dataframe(uploaded_data.head(10), use_container_width=True, hide_index=True)
+        except Exception as exc:
+            st.error(f"Could not read this file: {exc}")
+    data = current_data()
+    if data is not None:
+        st.info(f"Ready for Step 2: {len(data):,} records and {len(data.columns)} fields loaded.")
+        if st.button("Step 2 · Run validation", type="primary", use_container_width=True, key=f"{current_key()}_upload_validate"):
+            run_validation_action()
+            st.session_state["jump_page"] = "Validation Results"
+            st.rerun()
+    else:
+        st.warning("No data loaded yet. Choose a file or tick the demo option above.")
+
+elif page == "Reference Library":
+    st.header("Reference Library")
+    st.write("A simple guide to the checks this workspace can run. Reference rules help explain why a record was flagged.")
+    if st.session_state.workspace == "Regulatory":
+        refs = pd.DataFrame([
+            {"Reference group":"Required fields","What it checks":"Module, document ID, document name, version and review status","Rule IDs":"REG-001 to REG-004","How to use it":"Keep these columns in the uploaded document register."},
+            {"Reference group":"CTD module","What it checks":"Module values 1 to 5, including common formats such as 3 or Module 3","Rule IDs":"REG-005","How to use it":"Use the correct CTD module for each document."},
+            {"Reference group":"Review status","What it checks":"Approved, Reviewed, Draft or Pending","Rule IDs":"REG-006","How to use it":"Use one of the accepted status labels."},
+            {"Reference group":"Review date","What it checks":"Dates that cannot be interpreted","Rule IDs":"REG-007","How to use it":"Prefer YYYY-MM-DD."},
+            {"Reference group":"Duplicate documents","What it checks":"Repeated document identifiers","Rule IDs":"REG-008","How to use it":"Check whether repeated IDs are intentional."},
+            {"Reference group":"Expected documents","What it checks":"Configured expected document names in the register","Rule IDs":"REG-009","How to use it":"Review the expected-document checklist in Settings."},
+        ])
+    else:
+        refs = pd.DataFrame([
+            {"Reference group":"Required identifiers","What it checks":"Study ID, Site ID and Subject ID are present","Rule IDs":"CLN-001, CLN-002","How to use it":"Keep these columns in the clinical dataset."},
+            {"Reference group":"Date format","What it checks":"Date fields that cannot be interpreted","Rule IDs":"CLN-003","How to use it":"Prefer YYYY-MM-DD."},
+            {"Reference group":"Configured values","What it checks":"Values outside the allowed lists you provide","Rule IDs":"CLN-004","How to use it":"Set allowed values in Settings using the documented JSON format."},
+            {"Reference group":"Duplicate subjects","What it checks":"Repeated Study + Site + Subject combinations","Rule IDs":"CLN-005","How to use it":"Review whether repeated records are expected."},
+        ])
+    st.dataframe(refs, use_container_width=True, hide_index=True)
+    st.markdown("#### External reference datasets")
+    st.info("RxNorm is a medication terminology reference, mainly useful for prescription/medication fields. It is not currently connected to these regulatory and clinical validation rules, so the app does not claim to verify medication names against RxNorm.")
+    st.caption("This library describes the rules currently implemented in this app; it is not an official compliance checklist or medical reference.")
+    with st.expander("When should RxNorm be used?"):
+        st.write("Use RxNorm only when a dataset contains medication-related fields and a medication-name/identifier comparison is explicitly configured. Do not use it to validate CTD modules, document versions, study IDs, or subject IDs.")
+        st.write("A future integration should record the source, version/date and matching method, and should flag unmatched terms for human review rather than automatically declaring them wrong.")
+
 if page == "Dashboard":
     st.header(f"{st.session_state.workspace} Dashboard")
     st.write("Follow the steps below in order. You do not need to know technical terms to use this app.")
     st.markdown("### Step 1 · Add your data")
-    st.caption("Choose a CSV or Excel file. For a safe practice run, use the sample data in the sidebar.")
-    main_upload = st.file_uploader("Upload your CSV / Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_dashboard_upload", help="Use a table with column headers in the first row. Do not upload patient-identifiable or confidential data.")
-    if main_upload is not None:
-        try:
-            main_sheets = workbook_sheets(main_upload)
-            main_sheet = st.selectbox("Choose worksheet", main_sheets, key=f"{current_key()}_dashboard_sheet") if len(main_sheets) > 1 else main_sheets[0]
-            main_upload.seek(0)
-            main_data = read_upload(main_upload, main_sheet)
-            set_source_data(main_data)
-            st.success(f"File ready: {main_upload.name} · {len(main_data):,} rows · {len(main_data.columns)} columns")
-        except Exception as exc:
-            st.error(f"Could not read this file: {exc}")
+    st.caption("Open Upload Data to choose a CSV/Excel file or load the safe demo dataset.")
+    if st.button("⬆️ Open Upload Data", type="primary", use_container_width=True, key="dashboard_go_upload"):
+        st.session_state["jump_page"] = "Upload Data"; st.rerun()
     data, result = current_data(), current_result()
     st.markdown("### Step 2 · Check your data")
     if data is not None:
@@ -308,7 +342,7 @@ if page == "Dashboard":
             run_validation_action()
             st.rerun()
     else:
-        st.info("No file loaded yet. Upload a file above, or tick **Use synthetic demo dataset** in the sidebar.")
+        st.info("No file loaded yet. Open **Upload Data** to choose a file or load the demo dataset.")
     kpis(data, result)
     if data is not None:
         st.subheader("Uploaded data preview")
@@ -327,7 +361,7 @@ if page == "Dashboard":
                 st.session_state["jump_page"] = "Reports & Export"; st.rerun()
         chart_status(result)
     else:
-        st.info("Start here: use the Upload & validate panel at the top of the sidebar.")
+        st.info("Start here: open **Upload Data** in the left navigation.")
     st.markdown("#### Workflow")
     steps = st.columns(4)
     for col, title, desc in zip(steps, ["1 · Upload", "2 · Validate", "3 · Review", "4 · Export"],
@@ -382,7 +416,7 @@ elif page == "Validation Results":
     st.header("Validation results & review actions")
     result = current_result()
     if result is None:
-        st.info("Upload data and click Submit data & run validation.")
+        st.info("Open **Upload Data** and click **Step 2 · Run validation**.")
     else:
         findings = result["findings"]
         kpis(current_data(), result)
@@ -483,7 +517,7 @@ elif page == "Audit Trail":
         st.info("No session events recorded yet. Validation runs and saved review actions will appear here.")
 elif page == "Settings":
     st.header("Settings & limitations")
-    st.markdown("- This prototype keeps uploaded data and review actions in the current Streamlit session only. Refreshes/restarts may clear them.")
+    st.markdown("- Uploaded data and review actions are kept in the current Streamlit session only. Refreshes/restarts may clear them.")
     st.markdown("- Use synthetic/demo data only; do not upload patient-identifiable or confidential submission data.")
     st.markdown("- Findings are configurable data-quality flags, not official regulatory decisions or clinical medical advice.")
     st.markdown("- A database is required for persistent records, users, and durable audit trails.")
