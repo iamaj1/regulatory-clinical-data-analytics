@@ -268,28 +268,32 @@ if page == "Upload Data":
     st.header("Step 1 · Upload your data")
     st.write("Choose the workspace first, then upload a CSV/Excel file or use the sample file to practise.")
     st.caption("Use synthetic/demo data only. Do not upload patient-identifiable or confidential information.")
-    demo = st.checkbox("Use the built-in demo dataset", key=f"{current_key()}_upload_demo")
-    if demo:
+    source_choice = st.radio("Where should the data come from?", ["Upload a file", "Use demo data"], horizontal=True,
+                             key=f"{current_key()}_source_choice")
+    if source_choice == "Use demo data":
         sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
         if sample.exists():
             sample_data = pd.read_csv(sample)
             set_source_data(sample_data)
             st.success(f"Demo data ready: {len(sample_data):,} records and {len(sample_data.columns)} columns.")
             st.dataframe(sample_data.head(10), use_container_width=True, hide_index=True)
-    uploaded = st.file_uploader("Choose a CSV or Excel file", type=["csv", "xlsx", "xls"],
-                                key=f"{current_key()}_workflow_upload",
-                                help="Your file should have column names in the first row.")
-    if uploaded is not None:
-        try:
-            sheets = workbook_sheets(uploaded)
-            sheet = st.selectbox("Choose worksheet", sheets, key=f"{current_key()}_workflow_sheet") if len(sheets) > 1 else sheets[0]
-            uploaded.seek(0)
-            uploaded_data = read_upload(uploaded, sheet)
-            set_source_data(uploaded_data)
-            st.success(f"File ready: {uploaded.name} · {len(uploaded_data):,} records · {len(uploaded_data.columns)} columns.")
-            st.dataframe(uploaded_data.head(10), use_container_width=True, hide_index=True)
-        except Exception as exc:
-            st.error(f"Could not read this file: {exc}")
+        else:
+            st.error("The demo file could not be found in this app version.")
+    else:
+        uploaded = st.file_uploader("Choose a CSV or Excel file", type=["csv", "xlsx", "xls"],
+                                    key=f"{current_key()}_workflow_upload",
+                                    help="Your file should have column names in the first row.")
+        if uploaded is not None:
+            try:
+                sheets = workbook_sheets(uploaded)
+                sheet = st.selectbox("Choose worksheet", sheets, key=f"{current_key()}_workflow_sheet") if len(sheets) > 1 else sheets[0]
+                uploaded.seek(0)
+                uploaded_data = read_upload(uploaded, sheet)
+                set_source_data(uploaded_data)
+                st.success(f"File ready: {uploaded.name} · {len(uploaded_data):,} records · {len(uploaded_data.columns)} columns.")
+                st.dataframe(uploaded_data.head(10), use_container_width=True, hide_index=True)
+            except Exception as exc:
+                st.error(f"Could not read this file: {exc}")
     data = current_data()
     if data is not None:
         st.info(f"Ready for Step 2: {len(data):,} records and {len(data.columns)} fields loaded.")
@@ -298,7 +302,7 @@ if page == "Upload Data":
             st.session_state["jump_page"] = "Validation Results"
             st.rerun()
     else:
-        st.warning("No data loaded yet. Choose a file or tick the demo option above.")
+        st.warning("No data loaded yet. Choose a file or select the demo option above.")
 
 elif page == "Reference Library":
     st.header("Reference Library")
