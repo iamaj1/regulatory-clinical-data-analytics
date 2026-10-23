@@ -8,7 +8,9 @@ A Streamlit portfolio application for transparent, configurable quality-review s
 - Clinical missing values, malformed dates, optional JSON consistency checks, duplicate subject records within study/site, and available query/subject metrics.
 - Row-level rule IDs, severity, explanation and corrective action; charts based on uploaded data.
 - CSV, Excel and PDF reports generated from the actual validation findings.
-- Synthetic demo files and a data dictionary. Uploaded data is never changed.
+- Guided four-step workflow: Upload Data → Validate → Review Findings → Final Report.
+- Dedicated Reference Library page describing implemented validation rules in plain language.
+- Synthetic demo files and a data dictionary. Uploaded source data is never changed.
 
 ## Run locally
 
@@ -26,6 +28,10 @@ For clinical consistency checks, use an optional JSON object such as `{"status":
 ## Deployment
 
 This repository is ready for Streamlit Community Cloud: connect the repository and use `app.py` as the entry point. Deployment has not been performed or verified by this repository.
+
+## Reference data
+
+The Reference Library documents the rules implemented by this app. RxNorm is medication terminology and is not currently integrated into this repository's regulatory/clinical validators. It should only be added as a comparator when a workflow explicitly includes medication-related fields and a verified RxNorm reference version/source. The app must not claim RxNorm checks are running unless that integration is implemented and tested.
 
 ## Limitations
 
