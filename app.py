@@ -66,6 +66,24 @@ def current_data():
 def current_result():
     return st.session_state.validation.get(current_key())
 
+def set_source_data(data: pd.DataFrame) -> None:
+    """Replace the active workspace dataset and invalidate results tied to older data."""
+    key = current_key()
+    previous = st.session_state.source_data.get(key)
+    unchanged = isinstance(previous, pd.DataFrame) and previous.equals(data)
+    if unchanged:
+        return
+    st.session_state.source_data[key] = data.copy()
+    st.session_state.validation.pop(key, None)
+    prefix = f"{key}::"
+    stale_keys = [item for item in st.session_state.review_actions if item.startswith(prefix)]
+    for item in stale_keys:
+        del st.session_state.review_actions[item]
+    if previous is not None:
+        log_event(f"{st.session_state.workspace}: dataset changed; previous validation and review actions cleared.")
+    else:
+        log_event(f"{st.session_state.workspace}: dataset loaded ({len(data)} rows).")
+
 def findings_with_actions(findings: pd.DataFrame) -> pd.DataFrame:
     if findings.empty:
         return findings.copy()
@@ -79,6 +97,25 @@ def findings_with_actions(findings: pd.DataFrame) -> pd.DataFrame:
     out["review_status"] = statuses
     out["action_taken"] = actions
     return out
+
+def case_reviews_table(data: pd.DataFrame) -> pd.DataFrame:
+    """Build a reportable subject-level review table from the current session actions."""
+    if not {"study_id", "site_id", "subject_id"}.issubset(data.columns):
+        return pd.DataFrame()
+    rows = []
+    for idx, record in data.reset_index(drop=True).iterrows():
+        saved = st.session_state.review_actions.get(f"{current_key()}::CASE::{idx + 1}", {})
+        rows.append({
+            "Source row": idx + 1,
+            "Study ID": record.get("study_id", ""),
+            "Site ID": record.get("site_id", ""),
+            "Subject ID": record.get("subject_id", ""),
+            "Review status": saved.get("status", "Pending"),
+            "Action taken": saved.get("action", "Not started"),
+            "Reviewer notes": saved.get("notes", ""),
+            "Last updated": saved.get("updated_at", ""),
+        })
+    return pd.DataFrame(rows)
 
 def get_validated(data: pd.DataFrame, workspace: str, expected_text: str = "", consistency_text: str = ""):
     if workspace == "Regulatory":
@@ -116,7 +153,7 @@ with st.sidebar:
     if demo:
         sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
         if sample.exists():
-            st.session_state.source_data[current_key()] = pd.read_csv(sample)
+            set_source_data(pd.read_csv(sample))
             st.caption(f"Demo loaded: {sample.name}")
     elif uploaded is not None:
         try:
@@ -124,7 +161,7 @@ with st.sidebar:
             sheet = st.selectbox("Worksheet", sheets, key=f"{current_key()}_sheet") if len(sheets) > 1 else sheets[0]
             uploaded.seek(0)
             data = read_upload(uploaded, sheet)
-            st.session_state.source_data[current_key()] = data
+            set_source_data(data)
             st.caption(f"Loaded: {uploaded.name} · {len(data):,} rows")
         except Exception as exc:
             st.error(f"Could not read this file: {exc}")
@@ -220,18 +257,25 @@ def report_page(data, result):
         st.info("Upload data and run validation before exporting a report.")
         return
     findings = findings_with_actions(result["findings"]) if result else pd.DataFrame()
+    case_reviews = case_reviews_table(data) if st.session_state.workspace == "Clinical" else pd.DataFrame()
     st.subheader("Final report")
-    st.write("The report combines the uploaded dataset, validation findings, severity, recommended corrective actions and review status.")
+    st.write("This report includes source data, validation findings, review status, actions taken and reviewer notes.")
     a, b, c = st.columns(3)
     a.metric("Source records", len(data))
     b.metric("Findings", len(findings) if result else "—")
-    c.metric("Completed", int((findings["review_status"] == "Completed").sum()) if not findings.empty else 0)
+    c.metric("Completed findings", int((findings["review_status"] == "Completed").sum()) if not findings.empty else 0)
     if result:
+        st.markdown("#### Validation findings")
         st.dataframe(findings, use_container_width=True, hide_index=True)
         st.download_button("Download CSV findings", csv_report(findings), "review_findings.csv", "text/csv", use_container_width=True)
-        st.download_button("Download Excel report", excel_report(data, findings), "final_review_report.xlsx",
+        if not case_reviews.empty:
+            st.markdown("#### Subject case reviews")
+            st.caption("Rows marked Pending have not yet been reviewed in this session.")
+            st.dataframe(case_reviews, use_container_width=True, hide_index=True)
+            st.download_button("Download case reviews CSV", case_reviews.to_csv(index=False).encode(), "clinical_case_reviews.csv", "text/csv", use_container_width=True)
+        st.download_button("Download Excel report", excel_report(data, findings, case_reviews), "final_review_report.xlsx",
                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-        st.download_button("Download PDF summary", pdf_report(f"{st.session_state.workspace} Review Report", findings),
+        st.download_button("Download PDF summary", pdf_report(f"{st.session_state.workspace} Review Report", findings, case_reviews),
                            "final_review_summary.pdf", "application/pdf", use_container_width=True)
     else:
         st.warning("Validation has not been run yet.")
@@ -248,7 +292,7 @@ if page == "Dashboard":
             main_sheet = st.selectbox("Choose worksheet", main_sheets, key=f"{current_key()}_dashboard_sheet") if len(main_sheets) > 1 else main_sheets[0]
             main_upload.seek(0)
             main_data = read_upload(main_upload, main_sheet)
-            st.session_state.source_data[current_key()] = main_data
+            set_source_data(main_data)
             st.success(f"File ready: {main_upload.name} · {len(main_data):,} rows · {len(main_data.columns)} columns")
         except Exception as exc:
             st.error(f"Could not read this file: {exc}")
