@@ -142,7 +142,8 @@ with st.sidebar:
         st.session_state["page_nav"] = "Dashboard"
     page = st.radio("Navigation", pages, key="page_nav", label_visibility="collapsed")
 
-st.markdown('<div class="hero"><h2>Regulatory & Clinical Data Analytics</h2><div class="small-note">Upload → Validate → Review → Export · Clear, traceable data-quality workflow</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="hero"><h2>Regulatory & Clinical Data Analytics</h2><div class="small-note">A simple 4-step workspace: 1. Upload your file → 2. Check the data → 3. Review issues → 4. Download the final report.</div></div>', unsafe_allow_html=True)
+st.info("New here? Start on Dashboard. Upload a CSV/Excel file, click **Run validation**, review each issue in plain language, then open **Reports & Export** for your final summary.")
 st.caption("Portfolio decision-support prototype · Use synthetic/demo data only. Do not upload patient-identifiable information.")
 
 def kpis(data, result):
@@ -169,12 +170,20 @@ def chart_status(result):
         return
     data = findings_with_actions(result["findings"])
     counts = data.groupby("review_status").size().reset_index(name="Count")
-    fig = px.bar(counts, x="Count", y="review_status", orientation="h", text="Count",
-                 title="Findings by review status", color="review_status",
-                 color_discrete_map={"Pending":"#c7a36b","In Review":"#7a9eab","Completed":"#7b9b88","Not Applicable":"#a7ada9"})
-    fig.update_layout(height=250, margin=dict(l=8,r=15,t=45,b=8), showlegend=False,
-                      xaxis_title="Number of findings", yaxis_title="", font=dict(size=12))
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    left, right = st.columns([1, 1.4])
+    with left:
+        donut = px.pie(counts, values="Count", names="review_status", hole=0.62, title="Review progress",
+                       color="review_status", color_discrete_map={"Pending":"#C89B55","In Review":"#6D9CB5","Completed":"#5B9278","Not Applicable":"#9AA5AD"})
+        donut.update_traces(textposition="inside", textinfo="percent")
+        donut.update_layout(height=280, margin=dict(l=8,r=8,t=48,b=8), legend_title_text="Status", font=dict(size=11))
+        st.plotly_chart(donut, use_container_width=True, config={"displayModeBar": False})
+    with right:
+        fig = px.bar(counts.sort_values("Count"), x="Count", y="review_status", orientation="h", text="Count",
+                     title="Issues by review status", color="review_status",
+                     color_discrete_map={"Pending":"#C89B55","In Review":"#6D9CB5","Completed":"#5B9278","Not Applicable":"#9AA5AD"})
+        fig.update_layout(height=280, margin=dict(l=8,r=12,t=48,b=8), showlegend=False,
+                          xaxis_title="Number of issues", yaxis_title="", font=dict(size=11))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 def action_editor(findings: pd.DataFrame, label: str = "Finding"):
     if findings.empty:
@@ -228,16 +237,46 @@ def report_page(data, result):
         st.warning("Validation has not been run yet.")
 
 if page == "Dashboard":
-    st.header(f"{st.session_state.workspace} work management")
-    st.write("Upload from the sidebar, then validate, review individual records and export a traceable report.")
+    st.header(f"{st.session_state.workspace} Dashboard")
+    st.write("Follow the steps below in order. You do not need to know technical terms to use this app.")
+    st.markdown("### Step 1 · Add your data")
+    st.caption("Choose a CSV or Excel file. For a safe practice run, use the sample data in the sidebar.")
+    main_upload = st.file_uploader("Upload your CSV / Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_dashboard_upload", help="Use a table with column headers in the first row. Do not upload patient-identifiable or confidential data.")
+    if main_upload is not None:
+        try:
+            main_sheets = workbook_sheets(main_upload)
+            main_sheet = st.selectbox("Choose worksheet", main_sheets, key=f"{current_key()}_dashboard_sheet") if len(main_sheets) > 1 else main_sheets[0]
+            main_upload.seek(0)
+            main_data = read_upload(main_upload, main_sheet)
+            st.session_state.source_data[current_key()] = main_data
+            st.success(f"File ready: {main_upload.name} · {len(main_data):,} rows · {len(main_data.columns)} columns")
+        except Exception as exc:
+            st.error(f"Could not read this file: {exc}")
     data, result = current_data(), current_result()
+    st.markdown("### Step 2 · Check your data")
+    if data is not None:
+        st.caption(f"Current dataset: {len(data):,} rows and {len(data.columns)} columns.")
+        if st.button("Run validation", type="primary", use_container_width=True, key=f"{current_key()}_dashboard_validate"):
+            run_validation_action()
+            st.rerun()
+    else:
+        st.info("No file loaded yet. Upload a file above, or tick **Use synthetic demo dataset** in the sidebar.")
     kpis(data, result)
     if data is not None:
         st.subheader("Uploaded data preview")
         st.caption(f"{len(data):,} records · {len(data.columns)} fields")
         st.dataframe(data.head(20), use_container_width=True, hide_index=True)
-        if st.button("Open validation results", type="primary"):
-            st.session_state["page_nav"] = "Validation Results"; st.rerun()
+        left_action, mid_action, right_action = st.columns(3)
+        with left_action:
+            if st.button("Open validation results", type="primary", use_container_width=True):
+                st.session_state["page_nav"] = "Validation Results"; st.rerun()
+        with mid_action:
+            case_page = "Subject Data Review" if st.session_state.workspace == "Clinical" else "Regulatory Dossier"
+            if st.button("Open record / case review", use_container_width=True):
+                st.session_state["page_nav"] = case_page; st.rerun()
+        with right_action:
+            if st.button("Open final report", use_container_width=True):
+                st.session_state["page_nav"] = "Reports & Export"; st.rerun()
         chart_status(result)
     else:
         st.info("Start here: use the Upload & validate panel at the top of the sidebar.")
@@ -364,10 +403,18 @@ elif page == "Analytics & Trends":
         else:
             chart_status(result)
             severity = findings.groupby("severity").size().reset_index(name="Findings")
-            fig = px.bar(severity, x="Findings", y="severity", orientation="h", text="Findings", title="Findings by severity",
-                         color="severity", color_discrete_map={"Critical":"#9b5555","High":"#c78d64","Medium":"#c6ad72","Low":"#7b9b88"})
-            fig.update_layout(height=240, margin=dict(l=8,r=10,t=45,b=8), showlegend=False, xaxis_title="Number of findings", yaxis_title="")
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+            chart_left, chart_right = st.columns([1, 1.4])
+            with chart_left:
+                sev_fig = px.pie(severity, values="Findings", names="severity", hole=0.55, title="Severity mix",
+                                 color="severity", color_discrete_map={"Critical":"#A84E4E","High":"#D18A54","Medium":"#D2B45E","Low":"#63947C"})
+                sev_fig.update_traces(textposition="inside", textinfo="percent")
+                sev_fig.update_layout(height=290, margin=dict(l=8,r=8,t=45,b=8), font=dict(size=11))
+                st.plotly_chart(sev_fig, use_container_width=True, config={"displayModeBar":False})
+            with chart_right:
+                fig = px.bar(severity.sort_values("Findings"), x="Findings", y="severity", orientation="h", text="Findings", title="Issues by severity",
+                             color="severity", color_discrete_map={"Critical":"#A84E4E","High":"#D18A54","Medium":"#D2B45E","Low":"#63947C"})
+                fig.update_layout(height=290, margin=dict(l=8,r=10,t=45,b=8), showlegend=False, xaxis_title="Number of issues", yaxis_title="", font=dict(size=11))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
             rule_counts = findings.groupby("rule_id").size().reset_index(name="Findings").sort_values("Findings", ascending=True)
             fig2 = px.bar(rule_counts, x="Findings", y="rule_id", orientation="h", text="Findings", title="Findings by validation rule")
             fig2.update_layout(height=max(200, min(360, 30*len(rule_counts)+80)), margin=dict(l=8,r=10,t=45,b=8), xaxis_title="Number of findings", yaxis_title="")
