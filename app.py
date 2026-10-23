@@ -150,38 +150,21 @@ with st.sidebar:
     st.selectbox("Switch workspace", ["Regulatory", "Clinical"], key="workspace")
     st.caption(f"{st.session_state.workspace.upper()} WORKSPACE")
 
-    # Upload is an always-visible workflow action, not a separate navigation page.
-    st.markdown("### ⬆️ Upload & validate")
-    demo = st.checkbox("Use synthetic demo dataset", key=f"{current_key()}_demo")
-    uploaded = st.file_uploader("Choose CSV or Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_upload")
-    if demo:
-        sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
-        if sample.exists():
-            set_source_data(pd.read_csv(sample))
-            st.caption(f"Demo loaded: {sample.name}")
-    elif uploaded is not None:
-        try:
-            sheets = workbook_sheets(uploaded)
-            sheet = st.selectbox("Worksheet", sheets, key=f"{current_key()}_sheet") if len(sheets) > 1 else sheets[0]
-            uploaded.seek(0)
-            data = read_upload(uploaded, sheet)
-            set_source_data(data)
-            st.caption(f"Loaded: {uploaded.name} · {len(data):,} rows")
-        except Exception as exc:
-            st.error(f"Could not read this file: {exc}")
-    if st.button("▶ Submit & Run Validation", type="primary", width="stretch", key=f"{current_key()}_run_validation"):
-        run_validation_action()
-    st.divider()
-
-    if st.session_state.workspace == "Regulatory":
-        pages = ["Dashboard", "Validation Results", "Regulatory Dossier", "CTD Module View", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
-    else:
-        pages = ["Dashboard", "Validation Results", "Clinical Data Quality", "Study Listings", "Subject Data Review", "Analytics & Trends", "Reports & Export", "Audit Trail", "Settings"]
-    if st.session_state.get("jump_page") in pages:
+    st.markdown("### Your workflow")
+    primary_pages = ["Dashboard", "1. Upload Data", "2. Validate Data", "3. Review Findings", "4. Final Report"]
+    secondary_pages = ["Reference Library", "Analytics & Trends", "Record Explorer", "CTD Module View", "Study Listings", "Subject Data Review", "Audit Trail", "Settings"]
+    if st.session_state.get("jump_page") in primary_pages:
         st.session_state["page_nav"] = st.session_state.pop("jump_page")
-    if st.session_state.get("page_nav") not in pages:
+        st.session_state["secondary_nav"] = "None"
+    if st.session_state.get("page_nav") not in primary_pages:
         st.session_state["page_nav"] = "Dashboard"
-    page = st.radio("Navigation", pages, key="page_nav", label_visibility="collapsed")
+    if st.session_state.get("secondary_nav") not in ["None"] + secondary_pages:
+        st.session_state["secondary_nav"] = "None"
+    primary_page = st.radio("Main steps", primary_pages, key="page_nav", label_visibility="collapsed")
+    with st.expander("More tools", expanded=False):
+        st.caption("Optional views for detailed review")
+        st.selectbox("Additional pages", ["None"] + secondary_pages, key="secondary_nav", label_visibility="collapsed")
+    page = st.session_state["secondary_nav"] if st.session_state["secondary_nav"] != "None" else primary_page
 
 st.markdown('<div class="hero"><h2>Regulatory & Clinical Data Analytics</h2><div class="small-note">A simple 4-step workspace: 1. Upload your file → 2. Check the data → 3. Review issues → 4. Download the final report.</div></div>', unsafe_allow_html=True)
 st.info("New here? Start on Dashboard. Upload a CSV/Excel file, click **Run validation**, review each issue in plain language, then open **Reports & Export** for your final summary.")
@@ -286,55 +269,146 @@ def report_page(data, result):
 
 if page == "Dashboard":
     st.header(f"{st.session_state.workspace} Dashboard")
-    st.write("Follow the steps below in order. You do not need to know technical terms to use this app.")
-    st.markdown("### Step 1 · Add your data")
-    st.caption("Choose a CSV or Excel file. For a safe practice run, use the sample data in the sidebar.")
-    main_upload = st.file_uploader("Upload your CSV / Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_dashboard_upload", help="Use a table with column headers in the first row. Do not upload patient-identifiable or confidential data.")
-    if main_upload is not None:
-        try:
-            main_sheets = workbook_sheets(main_upload)
-            main_sheet = st.selectbox("Choose worksheet", main_sheets, key=f"{current_key()}_dashboard_sheet") if len(main_sheets) > 1 else main_sheets[0]
-            main_upload.seek(0)
-            main_data = read_upload(main_upload, main_sheet)
-            set_source_data(main_data)
-            st.success(f"File ready: {main_upload.name} · {len(main_data):,} rows · {len(main_data.columns)} columns")
-        except Exception as exc:
-            st.error(f"Could not read this file: {exc}")
+    st.write("Start here. Follow these four steps in order—no technical knowledge is needed.")
     data, result = current_data(), current_result()
-    st.markdown("### Step 2 · Check your data")
-    if data is not None:
-        st.caption(f"Current dataset: {len(data):,} rows and {len(data.columns)} columns.")
-        if st.button("Run validation", type="primary", use_container_width=True, key=f"{current_key()}_dashboard_validate"):
-            run_validation_action()
-            st.rerun()
-    else:
-        st.info("No file loaded yet. Upload a file above, or tick **Use synthetic demo dataset** in the sidebar.")
     kpis(data, result)
-    if data is not None:
-        st.subheader("Uploaded data preview")
-        st.caption(f"{len(data):,} records · {len(data.columns)} fields")
-        st.dataframe(data.head(20), use_container_width=True, hide_index=True)
-        left_action, mid_action, right_action = st.columns(3)
-        with left_action:
-            if st.button("Open validation results", type="primary", use_container_width=True):
-                st.session_state["jump_page"] = "Validation Results"; st.rerun()
-        with mid_action:
-            case_page = "Subject Data Review" if st.session_state.workspace == "Clinical" else "Regulatory Dossier"
-            if st.button("Open record / case review", use_container_width=True):
-                st.session_state["jump_page"] = case_page; st.rerun()
-        with right_action:
-            if st.button("Open final report", use_container_width=True):
-                st.session_state["jump_page"] = "Reports & Export"; st.rerun()
-        chart_status(result)
+    st.markdown("### Your next step")
+    if data is None:
+        st.info("Step 1 is next: upload a CSV/Excel file or load the safe demo dataset.")
+        if st.button("1. Upload data", type="primary", use_container_width=True, key="dash_go_upload"):
+            st.session_state["jump_page"] = "1. Upload Data"; st.rerun()
+    elif result is None:
+        st.success(f"Data is ready: {len(data):,} rows and {len(data.columns)} columns.")
+        if st.button("2. Check my data", type="primary", use_container_width=True, key="dash_go_validate"):
+            st.session_state["jump_page"] = "2. Validate Data"; st.rerun()
     else:
-        st.info("Start here: use the Upload & validate panel at the top of the sidebar.")
-    st.markdown("#### Workflow")
+        st.success(f"Validation is complete: {len(result['findings'])} finding(s) need review.")
+        left, middle, right = st.columns(3)
+        with left:
+            if st.button("3. Review findings", type="primary", use_container_width=True, key="dash_go_review"):
+                st.session_state["jump_page"] = "3. Review Findings"; st.rerun()
+        with middle:
+            if st.button("4. Final report", use_container_width=True, key="dash_go_report"):
+                st.session_state["jump_page"] = "4. Final Report"; st.rerun()
+        with right:
+            if st.button("View analytics", use_container_width=True, key="dash_go_analytics"):
+                st.session_state["secondary_nav"] = "Analytics & Trends"; st.rerun()
+    if data is not None:
+        with st.expander("Preview uploaded data", expanded=False):
+            st.caption(f"{len(data):,} rows · {len(data.columns)} columns")
+            st.dataframe(data.head(10), use_container_width=True, hide_index=True)
+        if result:
+            chart_status(result)
+    st.markdown("#### How the system works")
     steps = st.columns(4)
     for col, title, desc in zip(steps, ["1 · Upload", "2 · Validate", "3 · Review", "4 · Export"],
-                                ["Choose CSV/XLSX", "Run configured checks", "Record action and status", "Download final report"]):
+                                ["Choose a file", "Check data quality", "Save status and notes", "Download the summary"]):
         col.markdown(f"**{title}**")
         col.caption(desc)
-elif page in ("Regulatory Dossier", "Clinical Data Quality"):
+elif page == "1. Upload Data":
+    st.header("Step 1 — Upload data")
+    st.write("Choose the Regulatory or Clinical workspace above, then upload a CSV/Excel file. You can also use sample data to practise.")
+    st.warning("Use synthetic/demo data only. Do not upload patient-identifiable or confidential information.")
+    demo = st.checkbox("Use safe demo dataset", key=f"{current_key()}_demo")
+    if demo:
+        sample = Path("samples/regulatory_demo.csv" if st.session_state.workspace == "Regulatory" else "samples/clinical_demo.csv")
+        if sample.exists():
+            set_source_data(pd.read_csv(sample))
+            st.success(f"Demo data loaded: {sample.name} · {len(current_data()):,} rows.")
+        else:
+            st.error("The demo file could not be found in this app version.")
+    uploaded = st.file_uploader("Choose CSV or Excel file", type=["csv", "xlsx", "xls"], key=f"{current_key()}_upload",
+                                help="Use a file with column headers in the first row.")
+    if uploaded is not None:
+        try:
+            sheets = workbook_sheets(uploaded)
+            sheet = st.selectbox("Choose worksheet", sheets, key=f"{current_key()}_sheet") if len(sheets) > 1 else sheets[0]
+            uploaded.seek(0)
+            data = read_upload(uploaded, sheet)
+            set_source_data(data)
+            st.success(f"File ready: {uploaded.name} · {len(data):,} rows · {len(data.columns)} columns.")
+        except Exception as exc:
+            st.error(f"Could not read this file: {exc}")
+    data = current_data()
+    if data is not None:
+        st.markdown("#### Data preview")
+        st.dataframe(data.head(15), use_container_width=True, hide_index=True)
+        st.caption("Next: continue to Step 2 — Validate Data.")
+        if st.button("Continue to validation →", type="primary", use_container_width=True, key="upload_continue"):
+            st.session_state["jump_page"] = "2. Validate Data"; st.rerun()
+    else:
+        st.info("No data loaded yet. Choose a file above or tick the demo option.")
+elif page == "2. Validate Data":
+    st.header("Step 2 — Check your data")
+    data, result = current_data(), current_result()
+    if data is None:
+        st.info("First complete Step 1 — Upload Data.")
+        if st.button("Go to upload", type="primary", key="validate_go_upload"):
+            st.session_state["jump_page"] = "1. Upload Data"; st.rerun()
+    else:
+        st.success(f"Ready to check {len(data):,} rows and {len(data.columns)} columns.")
+        with st.expander("What will be checked?", expanded=True):
+            if st.session_state.workspace == "Regulatory":
+                st.write("Required document fields, CTD module, document ID duplicates, version, review status, review dates and expected documents.")
+                st.text_input("Expected document names (comma-separated)", key="expected_docs",
+                              value=st.session_state.get("expected_docs", "Quality Overall Summary, Clinical Overview"))
+            else:
+                st.write("Required study/site/subject identifiers, missing values, date format, duplicate subject records and any configured consistency rules.")
+                st.text_area("Optional allowed-value rules (JSON)", key="consistency_rules",
+                             value=st.session_state.get("consistency_rules", ""),
+                             placeholder='Example: {"status": ["Complete", "Open"]}')
+        if st.button("Run validation now", type="primary", use_container_width=True, key="guided_run_validation"):
+            run_validation_action()
+            st.rerun()
+        if result is not None:
+            st.info(f"Last validation: {len(result['findings'])} finding(s). If you change the file, run validation again.")
+            if st.button("Continue to findings →", use_container_width=True, key="validate_continue"):
+                st.session_state["jump_page"] = "3. Review Findings"; st.rerun()
+elif page == "3. Review Findings":
+    st.header("Step 3 — Review findings")
+    result = current_result()
+    if result is None:
+        st.info("Run Step 2 — Validate Data first.")
+        if st.button("Go to validation", type="primary", key="review_go_validate"):
+            st.session_state["jump_page"] = "2. Validate Data"; st.rerun()
+    else:
+        findings = result["findings"]
+        kpis(current_data(), result)
+        if findings.empty:
+            st.success("No findings were generated for this dataset.")
+        else:
+            st.write("Select one item, read why it was flagged, choose an action, and save its status and notes.")
+            action_editor(findings)
+        if st.button("Continue to final report →", type="primary", use_container_width=True, key="review_continue"):
+            st.session_state["jump_page"] = "4. Final Report"; st.rerun()
+elif page == "4. Final Report":
+    report_page(current_data(), current_result())
+elif page == "Reference Library":
+    st.header("Reference library & validation rules")
+    st.write("This page shows which reference checks are built into this version. Reference data is used only when a relevant rule is actually connected to the validator.")
+    if st.session_state.workspace == "Regulatory":
+        rules = [
+            ("REG-001", "Required columns", "module, document_id, document_name, version, review_status"),
+            ("REG-002–004", "Document details", "Missing document ID, document name or version"),
+            ("REG-005", "CTD module", "Module must be 1–5"),
+            ("REG-006–007", "Review metadata", "Allowed review status and valid review date"),
+            ("REG-008", "Duplicate document ID", "Find repeated document identifiers"),
+            ("REG-009", "Expected document checklist", "Check the configured expected document names"),
+        ]
+    else:
+        rules = [
+            ("CLN-001", "Required columns", "study_id, site_id, subject_id"),
+            ("CLN-002", "Missing identifiers", "Find missing study, site or subject values"),
+            ("CLN-003", "Date format", "Check columns with date in the name"),
+            ("CLN-004", "Allowed values", "Optional user-configured JSON consistency rules"),
+            ("CLN-005", "Duplicate subject record", "Find duplicate study/site/subject combinations"),
+        ]
+    st.dataframe(pd.DataFrame(rules, columns=["Rule ID", "Check", "What it checks"]), use_container_width=True, hide_index=True)
+    st.markdown("#### RxNorm medication reference")
+    st.info("RxNorm belongs to the separate pharmacy/prescription workflow. It is not currently connected to these regulatory/clinical validators, so this app does not claim to compare uploads against RxNorm.")
+    st.markdown("#### Future reference-data controls")
+    st.write("A safe next enhancement is a versioned reference-data manager showing source, version/date, which rules use it, and whether it is enabled. A reference file should not affect validation until its schema and matching rules are explicitly configured and tested.")
+elif page == "Record Explorer":
     st.header("Record explorer")
     data, result = current_data(), current_result()
     if data is None:
