@@ -88,14 +88,18 @@ def findings_with_actions(findings: pd.DataFrame) -> pd.DataFrame:
     if findings.empty:
         return findings.copy()
     out = findings.copy()
-    statuses, actions = [], []
+    statuses, actions, notes_list, updated_list = [], [], [], []
     for _, row in out.iterrows():
         key = f"{current_key()}::{row.get('rule_id','')}::{row.get('record_reference','')}::{row.get('row','')}"
         saved = st.session_state.review_actions.get(key, {})
         statuses.append(saved.get("status", "Pending"))
         actions.append(saved.get("action", "Not started"))
+        notes_list.append(saved.get("notes", ""))
+        updated_list.append(saved.get("updated_at", ""))
     out["review_status"] = statuses
     out["action_taken"] = actions
+    out["reviewer_notes"] = notes_list
+    out["last_updated"] = updated_list
     return out
 
 def case_reviews_table(data: pd.DataFrame) -> pd.DataFrame:
@@ -425,12 +429,16 @@ elif page == "Subject Data Review":
                 st.success("No configured validation findings for this record.")
             else:
                 action_editor(related, "subject finding")
+        case_key = f"{current_key()}::CASE::{idx+1}"
+        saved_case = st.session_state.review_actions.get(case_key, {})
+        status_options = ["Pending", "In Review", "Completed", "Not Applicable"]
         with st.form(f"subject_action_{idx}"):
-            case_status = st.selectbox("Case review status", ["Pending", "In Review", "Completed", "Not Applicable"], key=f"case_status_{idx}")
-            case_notes = st.text_area("Case review notes", key=f"case_notes_{idx}")
+            case_status = st.selectbox("Case review status", status_options,
+                                       index=status_options.index(saved_case.get("status", "Pending")),
+                                       key=f"case_status_{idx}")
+            case_notes = st.text_area("Case review notes", value=saved_case.get("notes", ""), key=f"case_notes_{idx}")
             if st.form_submit_button("Save case review"):
-                key = f"{current_key()}::CASE::{idx+1}"
-                st.session_state.review_actions[key] = {"status":case_status, "action":"Case review", "notes":case_notes, "updated_at":datetime.now().isoformat(timespec="seconds")}
+                st.session_state.review_actions[case_key] = {"status":case_status, "action":"Case review", "notes":case_notes, "updated_at":datetime.now().isoformat(timespec="seconds")}
                 log_event(f"Clinical subject row {idx+1} case review saved as {case_status}.")
                 st.success("Case review saved for this session.")
 elif page == "Analytics & Trends":
