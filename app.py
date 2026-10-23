@@ -269,14 +269,14 @@ if page == "Dashboard":
         left_action, mid_action, right_action = st.columns(3)
         with left_action:
             if st.button("Open validation results", type="primary", use_container_width=True):
-                st.session_state["page_nav"] = "Validation Results"; st.rerun()
+                st.session_state["jump_page"] = "Validation Results"; st.rerun()
         with mid_action:
             case_page = "Subject Data Review" if st.session_state.workspace == "Clinical" else "Regulatory Dossier"
             if st.button("Open record / case review", use_container_width=True):
-                st.session_state["page_nav"] = case_page; st.rerun()
+                st.session_state["jump_page"] = case_page; st.rerun()
         with right_action:
             if st.button("Open final report", use_container_width=True):
-                st.session_state["page_nav"] = "Reports & Export"; st.rerun()
+                st.session_state["jump_page"] = "Reports & Export"; st.rerun()
         chart_status(result)
     else:
         st.info("Start here: use the Upload & validate panel at the top of the sidebar.")
